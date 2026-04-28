@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 
 import numpy as np
@@ -6,6 +7,8 @@ import numpy as np
 from .config import DUMMY_DIM, DUMMY_MODE, GPU_DEVICE_ID, MAX_LENGTH, MODEL_PATH, USE_GPU
 
 logger = logging.getLogger(__name__)
+
+WORD_PATTERN = re.compile(r"\w+", re.UNICODE)
 
 
 class EmbeddingModel:
@@ -77,6 +80,43 @@ class EmbeddingModel:
         t_total = time.perf_counter() - t0
         logger.info("Encode complete: count=%d, dim=%d, total=%.3fs", len(texts), embeddings.shape[1], t_total)
         return embeddings.tolist()
+
+    def extract_unknown_terms(
+        self,
+        texts: list[str],
+        min_pieces: int = 4,
+        pieces_per_char: float = 0.6,
+    ) -> list[dict]:
+        if DUMMY_MODE or self.tokenizer is None:
+            return [{"text": t, "unknown_terms": []} for t in texts]
+
+        unk_id = self.tokenizer.unk_token_id
+        results = []
+        for text in texts:
+            seen: set[str] = set()
+            unknown: list[dict] = []
+            for word in WORD_PATTERN.findall(text):
+                if word in seen:
+                    continue
+                seen.add(word)
+                ids = self.tokenizer.encode(word, add_special_tokens=False)
+                if not ids:
+                    continue
+                reasons = []
+                if unk_id is not None and unk_id in ids:
+                    reasons.append("unk")
+                if len(ids) >= min_pieces and len(ids) / max(len(word), 1) >= pieces_per_char:
+                    reasons.append("fragmented")
+                if reasons:
+                    unknown.append({
+                        "term": word,
+                        "reasons": reasons,
+                        "pieces": self.tokenizer.convert_ids_to_tokens(ids),
+                        "num_pieces": len(ids),
+                    })
+            logger.info("extract_unknown_terms: text_len=%d, unknown_count=%d", len(text), len(unknown))
+            results.append({"text": text, "unknown_terms": unknown})
+        return results
 
 
 model = EmbeddingModel()

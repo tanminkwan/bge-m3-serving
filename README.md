@@ -573,6 +573,65 @@ curl -X POST http://localhost:8000/embed \
 - `count`: 입력 텍스트 수
 - 빈 배열 `{"texts": []}` 입력 시 `{"embeddings": [], "dim": 0, "count": 0}` 반환
 
+### POST /unknown-terms
+
+입력 텍스트를 토크나이저로 분해해, 임베딩 모델이 잘 모르는 것으로 의심되는 단어를 추출.
+
+bge-m3의 토크나이저(XLM-RoBERTa SentencePiece)는 모든 문자를 서브워드로 분해할 수 있어 진짜 `<unk>` 토큰은 거의 발생하지 않음. 대신 모델이 통째로 알지 못하는 단어는 **여러 개의 서브워드 조각으로 잘게 쪼개지는** 경향이 있어, 이 두 가지 신호를 모두 검사:
+
+- `unk`: 단어가 `<unk>` 토큰으로 떨어진 경우
+- `fragmented`: 단어가 `min_pieces`개 이상의 조각으로 분해되고, 그 비율(조각 수 ÷ 글자 수)이 `pieces_per_char` 이상인 경우
+
+```bash
+curl -X POST http://localhost:8000/unknown-terms \
+  -H "Content-Type: application/json" \
+  -d '{"texts": ["삼성전자 DS부문 HBM3E 양산 로드맵"]}'
+```
+
+요청:
+
+```json
+{
+  "texts": ["삼성전자 DS부문 HBM3E 양산 로드맵"],
+  "min_pieces": 4,
+  "pieces_per_char": 0.6
+}
+```
+
+| 필드 | 기본값 | 설명 |
+|---|---|---|
+| `texts` | (필수) | 분석할 텍스트 목록 |
+| `min_pieces` | `4` | "fragmented"로 판정할 최소 서브워드 조각 수 |
+| `pieces_per_char` | `0.6` | 조각 수 / 글자 수 비율 임계값 (작을수록 더 많은 단어가 잡힘) |
+
+응답:
+
+```json
+{
+  "results": [
+    {
+      "text": "삼성전자 DS부문 HBM3E 양산 로드맵",
+      "unknown_terms": [
+        {
+          "term": "HBM3E",
+          "reasons": ["fragmented"],
+          "pieces": ["▁H", "BM", "3", "E"],
+          "num_pieces": 4
+        }
+      ]
+    }
+  ],
+  "count": 1
+}
+```
+
+- `term`: 의심 단어
+- `reasons`: 판정 사유 (`unk`, `fragmented` 또는 둘 다)
+- `pieces`: 토크나이저가 실제로 분해한 서브워드 토큰
+- `num_pieces`: 조각 수
+- 같은 텍스트 내 중복 단어는 한 번만 보고됨
+- 임계값은 도메인 데이터에 맞춰 조정 가능. 임계값을 낮추면 의심 단어가 더 많이 잡힘
+
 ---
 
 ## 환경변수

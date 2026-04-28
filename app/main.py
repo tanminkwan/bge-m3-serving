@@ -29,6 +29,29 @@ class EmbedResponse(BaseModel):
     count: int
 
 
+class UnknownTermsRequest(BaseModel):
+    texts: list[str]
+    min_pieces: int = 4
+    pieces_per_char: float = 0.6
+
+
+class UnknownTerm(BaseModel):
+    term: str
+    reasons: list[str]
+    pieces: list[str]
+    num_pieces: int
+
+
+class UnknownTermsItem(BaseModel):
+    text: str
+    unknown_terms: list[UnknownTerm]
+
+
+class UnknownTermsResponse(BaseModel):
+    results: list[UnknownTermsItem]
+    count: int
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "dummy_mode": DUMMY_MODE, "model_path": MODEL_PATH}
@@ -52,3 +75,23 @@ def embed(req: EmbedRequest, request: Request):
         dim=len(vectors[0]),
         count=len(vectors),
     )
+
+
+@app.post("/unknown-terms", response_model=UnknownTermsResponse)
+def unknown_terms(req: UnknownTermsRequest, request: Request):
+    if not req.texts:
+        client = request.client.host if request.client else "unknown"
+        logger.warning("Empty texts received from %s", client)
+        return UnknownTermsResponse(results=[], count=0)
+
+    try:
+        results = model.extract_unknown_terms(
+            req.texts,
+            min_pieces=req.min_pieces,
+            pieces_per_char=req.pieces_per_char,
+        )
+    except Exception:
+        logger.exception("extract_unknown_terms failed: count=%d", len(req.texts))
+        raise
+
+    return UnknownTermsResponse(results=results, count=len(results))
