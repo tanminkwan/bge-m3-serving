@@ -105,8 +105,11 @@ class EmbeddingModel:
                 reasons = []
                 if unk_id is not None and unk_id in ids:
                     reasons.append("unk")
-                if len(ids) >= min_pieces and len(ids) / max(len(word), 1) >= pieces_per_char:
-                    reasons.append("fragmented")
+                ratio = len(ids) / max(len(word), 1)
+                if len(ids) >= min_pieces:
+                    reasons.append("fragmented_count")
+                if len(ids) >= 2 and ratio >= pieces_per_char:
+                    reasons.append("fragmented_density")
                 if reasons:
                     unknown.append({
                         "term": word,

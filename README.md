@@ -577,10 +577,13 @@ curl -X POST http://localhost:8000/embed \
 
 입력 텍스트를 토크나이저로 분해해, 임베딩 모델이 잘 모르는 것으로 의심되는 단어를 추출.
 
-bge-m3의 토크나이저(XLM-RoBERTa SentencePiece)는 모든 문자를 서브워드로 분해할 수 있어 진짜 `<unk>` 토큰은 거의 발생하지 않음. 대신 모델이 통째로 알지 못하는 단어는 **여러 개의 서브워드 조각으로 잘게 쪼개지는** 경향이 있어, 이 두 가지 신호를 모두 검사:
+bge-m3의 토크나이저(XLM-RoBERTa SentencePiece)는 모든 문자를 서브워드로 분해할 수 있어 진짜 `<unk>` 토큰은 거의 발생하지 않음. 대신 모델이 통째로 알지 못하는 단어는 **여러 개의 서브워드 조각으로 잘게 쪼개지는** 경향이 있어, 다음 신호 중 하나라도 충족되면 의심 단어로 판정 (OR 결합):
 
 - `unk`: 단어가 `<unk>` 토큰으로 떨어진 경우
-- `fragmented`: 단어가 `min_pieces`개 이상의 조각으로 분해되고, 그 비율(조각 수 ÷ 글자 수)이 `pieces_per_char` 이상인 경우
+- `fragmented_count`: 조각 수가 `min_pieces` 이상인 경우 (긴 영어 미지 단어 검출에 효과적)
+- `fragmented_density`: 조각 수 ÷ 글자 수 비율이 `pieces_per_char` 이상이고 조각 수가 2개 이상인 경우 (한국어 등 글자 밀도가 높은 언어의 미지 단어 검출에 효과적)
+
+> 한국어와 영어를 분리한 이유: 한국어는 한 글자가 보통 1 piece라 미지 단어의 density가 1.0에 가깝지만, 영어는 1 글자 = 1 byte 단위로 분해되어 미지 단어여도 density가 0.4~0.5에 머무름. 따라서 한 가지 임계치만으로는 두 언어를 동시에 잡기 어려워 두 신호를 OR로 결합함.
 
 ```bash
 curl -X POST http://localhost:8000/unknown-terms \
@@ -601,8 +604,8 @@ curl -X POST http://localhost:8000/unknown-terms \
 | 필드 | 기본값 | 설명 |
 |---|---|---|
 | `texts` | (필수) | 분석할 텍스트 목록 |
-| `min_pieces` | `4` | "fragmented"로 판정할 최소 서브워드 조각 수 |
-| `pieces_per_char` | `0.6` | 조각 수 / 글자 수 비율 임계값 (작을수록 더 많은 단어가 잡힘) |
+| `min_pieces` | `4` | `fragmented_count` 판정 임계값. 조각 수가 이 값 이상이면 트리거. 영어 등 글자 밀도가 낮은 언어 검출에 영향 |
+| `pieces_per_char` | `0.6` | `fragmented_density` 판정 임계값. 조각 수 / 글자 수 비율이 이 값 이상이면 트리거 (조각 수 ≥ 2 조건 추가). 한국어 등 글자 밀도가 높은 언어 검출에 영향 |
 
 응답:
 
@@ -614,7 +617,7 @@ curl -X POST http://localhost:8000/unknown-terms \
       "unknown_terms": [
         {
           "term": "HBM3E",
-          "reasons": ["fragmented"],
+          "reasons": ["fragmented_count", "fragmented_density"],
           "pieces": ["▁H", "BM", "3", "E"],
           "num_pieces": 4
         }
@@ -626,11 +629,11 @@ curl -X POST http://localhost:8000/unknown-terms \
 ```
 
 - `term`: 의심 단어
-- `reasons`: 판정 사유 (`unk`, `fragmented` 또는 둘 다)
+- `reasons`: 판정 사유. `unk`, `fragmented_count`, `fragmented_density` 중 충족된 항목들
 - `pieces`: 토크나이저가 실제로 분해한 서브워드 토큰
 - `num_pieces`: 조각 수
 - 같은 텍스트 내 중복 단어는 한 번만 보고됨
-- 임계값은 도메인 데이터에 맞춰 조정 가능. 임계값을 낮추면 의심 단어가 더 많이 잡힘
+- 임계값은 도메인 데이터에 맞춰 조정 가능. `min_pieces`를 낮추면 영어 미지 단어가 더 많이 잡히고, `pieces_per_char`를 낮추면 한국어 미지 단어가 더 많이 잡힘
 
 ---
 
