@@ -1,0 +1,30 @@
+services:
+  embedding:
+    container_name: embedding-server
+    image: embedding-server
+    restart: unless-stopped
+    networks:
+      - aipro-net
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./bge-m3/onnx:/model
+    environment:
+      - MODEL_PATH=/model
+      - USE_GPU=true
+      - GPU_DEVICE_ID=0
+      - DUMMY_MODE=false
+      - DUMMY_DIM=1024
+      - MAX_LENGTH=8192
+      - LOG_LEVEL=INFO
+      - TRANSFORMERS_OFFLINE=1
+      - HF_HUB_OFFLINE=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+networks:
+  aipro-net:
+    external: true

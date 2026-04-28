@@ -1,0 +1,19 @@
+# Large ONNX model weights — download from HuggingFace BAAI/bge-m3 into bge-m3/onnx/
+bge-m3/onnx/model.onnx
+bge-m3/onnx/model.onnx_data
+bge-m3/onnx/Constant_7_attr__value
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Claude local settings
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db

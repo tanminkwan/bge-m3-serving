@@ -1,0 +1,5 @@
+bge-m3.tar
+bge-m3.tar.gz
+__pycache__
+*.pyc
+.cache
